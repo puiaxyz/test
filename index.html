@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>K-Means Visualizer</title>
+<style>
+  body { font-family: sans-serif; display: flex; }
+  #canvas { border: 1px solid #333; cursor: crosshair; }
+  #controls { margin-left: 10px; }
+  button, input { display: block; margin: 10px 0; }
+</style>
+</head>
+<body>
+
+<canvas id="canvas" width="600" height="600"></canvas>
+
+<div id="controls">
+  <label>Number of Clusters (K):
+    <input type="number" id="kInput" value="3" min="1" max="10" />
+  </label>
+  <button id="runBtn">Run</button>
+  <button id="resetBtn">Reset</button>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const runBtn = document.getElementById('runBtn');
+const resetBtn = document.getElementById('resetBtn');
+const kInput = document.getElementById('kInput');
+
+let points = [];
+let centroids = [];
+let labels = [];
+let running = false;
+
+canvas.addEventListener('click', (e) => {
+  if (running) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / canvas.width;
+  const y = (e.clientY - rect.top) / canvas.height;
+  points.push([x, y]);
+  draw();
+});
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // draw points
+  points.forEach(p => {
+    ctx.fillStyle = 'red';
+    ctx.beginPath();
+    ctx.arc(p[0]*canvas.width, p[1]*canvas.height, 5, 0, 2 * Math.PI);
+    ctx.fill();
+  });
+  // draw clusters
+  if (centroids.length > 0) {
+    const colors = ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
+    points.forEach((p,i) => {
+      if (labels[i] !== undefined) {
+        ctx.fillStyle = colors[labels[i] % colors.length];
+        ctx.beginPath();
+        ctx.arc(p[0]*canvas.width, p[1]*canvas.height, 7, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    });
+    // draw centroids
+    centroids.forEach((c,i) => {
+      ctx.fillStyle = colors[i % colors.length];
+      ctx.strokeStyle = 'black';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(c[0]*canvas.width, c[1]*canvas.height, 15, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+    });
+  }
+}
+
+function distanceSquared(a, b) {
+  return (a[0]-b[0])**2 + (a[1]-b[1])**2;
+}
+
+function computeLabels(points, centroids) {
+  return points.map(p => {
+    let minDist = Infinity, minIdx = -1;
+    centroids.forEach((c,i) => {
+      const dist = distanceSquared(p,c);
+      if (dist < minDist) {
+        minDist = dist; minIdx = i;
+      }
+    });
+    return minIdx;
+  });
+}
+
+function updateCentroids(points, labels, k) {
+  const sums = Array(k).fill(0).map(_ => [0,0]);
+  const counts = Array(k).fill(0);
+  points.forEach((p,i) => {
+    const label = labels[i];
+    sums[label][0] += p[0];
+    sums[label][1] += p[1];
+    counts[label]++;
+  });
+  return sums.map((sum,i) => counts[i] === 0 ? [Math.random(), Math.random()] : [sum[0]/counts[i], sum[1]/counts[i]]);
+}
+
+async function runKMeans() {
+  if (points.length === 0) return;
+  running = true;
+  let k = parseInt(kInput.value);
+  if (k < 1) k = 1;
+  if (k > points.length) k = points.length;
+
+  // initialize centroids randomly from points
+  centroids = [];
+  const chosen = new Set();
+  while (centroids.length < k) {
+    const idx = Math.floor(Math.random() * points.length);
+    if (!chosen.has(idx)) {
+      centroids.push(points[idx]);
+      chosen.add(idx);
+    }
+  }
+
+  let labelsPrev = [];
+  for (;;) {
+    labels = computeLabels(points, centroids);
+    draw();
+    await new Promise(r => setTimeout(r, 800));
+    if (JSON.stringify(labels) === JSON.stringify(labelsPrev)) break; // convergence
+    labelsPrev = [...labels];
+    centroids = updateCentroids(points, labels, k);
+  }
+  running = false;
+}
+
+runBtn.addEventListener('click', runKMeans);
+resetBtn.addEventListener('click', () => {
+  points = [];
+  centroids = [];
+  labels = [];
+  running = false;
+  draw();
+});
+
+draw();
+</script>
+
+</body>
+</html>
